@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env/
+
+# Jupyter Notebook checkpoints (если появятся)
+.ipynb_checkpoints/
+
+# VSCode / PyCharm settings
+.vscode/
+.idea/
+
+# Model weights
+*.h5
+*.pt
+*.pth
+*.ckpt
+
+# Data folders
+data/dataset/
+data/output/
+
+# Logs, reports, etc.
+*.log
+*.csv
+*.pdf
+*.xlsx
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
