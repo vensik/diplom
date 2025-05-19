@@ -1,0 +1,73 @@
+
+QWidget {
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+
+QLabel#titleLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #4fc3f7;
+}
+
+QLabel#resultLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #81d4fa;
+    padding: 10px;
+}
+
+QPushButton {
+    background-color: #0277bd;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+}
+
+QPushButton:hover {
+    background-color: #039be5;
+}
+
+QPushButton:pressed {
+    background-color: #0288d1;
+}
+
+QGroupBox {
+    border: 1px solid #555;
+    border-radius: 8px;
+    margin-top: 20px;
+    padding: 10px;
+    color: #81d4fa;
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    top: -12px;
+    padding: 0 3px;
+    background-color: #1e1e1e;
+}
+
+QCheckBox {
+    spacing: 8px;
+    color: #f0f0f0;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #4fc3f7;
+    border: 1px solid #4fc3f7;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2e2e2e;
+    border: 1px solid #777;
+}
