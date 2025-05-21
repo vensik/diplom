@@ -1,7 +1,7 @@
 PyQt5
 opencv-python
 Pillow
-numpy
+NumPy
 
 torch==2.2.2+cu118
 torchvision==0.17.2+cu118

@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QApplication
-from gui.main_window import MainWindow
+from gui.main_window import DentalDiagnosisApp
 import sys
 
 if __name__ == "__main__":
@@ -8,7 +8,7 @@ if __name__ == "__main__":
     with open("gui/style.qss", "r") as f:
         app.setStyleSheet(f.read())
 
-    window = MainWindow()
+    window = DentalDiagnosisApp()
     window.show()
     
     sys.exit(app.exec_())
