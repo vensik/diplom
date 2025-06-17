@@ -1,17 +1,8 @@
 # gui/canvas.py
 
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QCursor
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QCursor, QRegion, QPolygonF
 from PyQt5.QtCore import Qt, QTimer, QPointF, QPoint
-from ai.diagnosis import get_row_from_label
-
-ROW_COLORS = {
-    "верхний правый": QColor(70, 70, 70, 120),
-    "верхний левый": QColor(130, 130, 130, 120),
-    "нижний левый": QColor(180, 180, 180, 120),
-    "нижний правый": QColor(220, 220, 220, 120),
-    "не определён": QColor(190, 190, 190, 120)
-}
 
 DISEASE_COLORS = {
     "caries": QColor(255, 0, 0, 150),
@@ -19,7 +10,6 @@ DISEASE_COLORS = {
     "calculus": QColor(255, 165, 0, 150),
     "implant": QColor(128, 0, 128, 150),
 }
-
 
 class Canvas(QWidget):
     def __init__(self, parent=None):
@@ -149,7 +139,6 @@ class Canvas(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-
         # Обновляем кэш при необходимости
         if self.scaled_cache is None or self.scale_factor_changed:
             self.scaled_cache = self.image.scaled(
@@ -165,45 +154,81 @@ class Canvas(QWidget):
         y = int((self.height() - self.scaled_cache.height()) // 2 + self.image_offset.y())
         painter.drawPixmap(x, y, self.scaled_cache)
 
-        # Сначала — зубы (серые по ряду)
+        # 1. Затемняем весь снимок
+        dark_color = QColor(0, 0, 0, 170)  # 170 из 255 ~70% затемнение
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.fillRect(x, y, self.scaled_cache.width(), self.scaled_cache.height(), dark_color)
+
+        # 2. Ярко выделяем только отмеченные зубы (поверх затемнения)
+        img_w, img_h = self.image.width(), self.image.height()
+        scale_w = self.scaled_cache.width() / img_w
+        scale_h = self.scaled_cache.height() / img_h
+
         for segment in self.visible_segments:
             if segment['label'] not in self.active_labels:
                 continue
 
+            # Только для зубов!
             if segment['label'].startswith("tooth"):
-                row = get_row_from_label(segment['label'])
-                color = ROW_COLORS.get(row, ROW_COLORS["не определён"])
-            else:
-                # Патология — цветной слой
-                color = DISEASE_COLORS.get(segment['label'].lower(), QColor(0, 0, 255, 150))
+                # Создаем QPixmap-маску
+                tooth_mask = QPixmap(self.scaled_cache.size())
+                tooth_mask.fill(Qt.transparent)
+                tooth_painter = QPainter(tooth_mask)
+                tooth_painter.setRenderHint(QPainter.Antialiasing)
+                path = []
+                for px, py in segment['points']:
+                    sx = int(px * scale_w)
+                    sy = int(py * scale_h)
+                    path.append(QPointF(sx, sy))
+                if len(path) > 2:
+                    # Маска зуба — белым цветом
+                    tooth_painter.setPen(Qt.NoPen)
+                    tooth_painter.setBrush(QBrush(Qt.white))
+                    tooth_painter.drawPolygon(*path)
+                tooth_painter.end()
 
-            painter.setBrush(QBrush(color))
-            painter.setPen(Qt.NoPen)
+                # Вырезаем область зуба с оригинального снимка
+                tooth_pixmap = QPixmap(self.scaled_cache.size())
+                tooth_pixmap.fill(Qt.transparent)
+                cut_painter = QPainter(tooth_pixmap)
+                cut_painter.setClipRegion(QRegion(QPolygonF(path).toPolygon()))
+                cut_painter.drawPixmap(0, 0, self.scaled_cache)
+                cut_painter.end()
 
-            # Преобразование координат
-            path = []
-            img_w, img_h = self.image.width(), self.image.height()
-            scale_w = self.scaled_cache.width() / img_w
-            scale_h = self.scaled_cache.height() / img_h
-            
-            for px, py in segment['points']:
-                sx = x + (px * scale_w)
-                sy = y + (py * scale_h)
-                path.append(QPointF(sx, sy))
+                # Повышаем яркость (белым Screen-режимом)
+                highlight_painter = QPainter(tooth_pixmap)
+                highlight_painter.setCompositionMode(QPainter.CompositionMode_Screen)
+                highlight_painter.setClipRegion(QRegion(QPolygonF(path).toPolygon()))
+                highlight_painter.fillRect(tooth_pixmap.rect(), QColor(255, 255, 255, 70))
+                highlight_painter.end()
 
-            # Рисуем полигон
-            if len(path) > 2:
-                painter.drawPolygon(*path)
-                # Подпись только для зубов
-                if segment['label'].startswith("tooth"):
-                    painter.setPen(Qt.white)
-                    label_x = min(p.x() for p in path)
-                    label_y = min(p.y() for p in path)
-                    # Только номер в ряду!
-                    pos = segment['label'].split()[-1][-1]
-                    painter.drawText(int(label_x), int(label_y) - 5, pos)
-                else:
-                    # Для патологий — подпись названия болезни
+                # Рисуем выделенный зуб поверх затемнения
+                painter.drawPixmap(x, y, tooth_pixmap)
+
+                # Подпись номера зуба
+                painter.setPen(Qt.white)
+                label_x = min(p.x() for p in path)
+                label_y = min(p.y() for p in path)
+                pos = segment['label'].split()[-1]
+                painter.drawText(int(label_x) + x, int(label_y) + y - 5, pos)
+
+        # 3. Патологии (если нужно)
+        for segment in self.visible_segments:
+            if segment['label'] not in self.active_labels:
+                continue
+            if not segment['label'].startswith("tooth"):
+                # Патология — цветная полупрозрачная заливка/контур поверх
+                path = []
+                for px, py in segment['points']:
+                    sx = x + (px * scale_w)
+                    sy = y + (py * scale_h)
+                    path.append(QPointF(sx, sy))
+                if len(path) > 2:
+                    color = DISEASE_COLORS.get(segment['label'].lower(), QColor(255, 0, 0, 150))
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(color))
+                    painter.drawPolygon(*path)
+                    # Подпись названия патологии
                     painter.setPen(Qt.yellow)
                     label_x = min(p.x() for p in path)
                     label_y = max(p.y() for p in path)

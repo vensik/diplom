@@ -53,10 +53,11 @@ def predict_teeth(image_path):
         unique_segments = {}
         for seg in segments:
             lbl = seg['label']
-            if lbl not in unique_segments or seg['confidence'] > unique_segments[lbl]['confidence']:
+            conf = seg.get('confidence', 0.0)
+            if lbl not in unique_segments or conf > unique_segments[lbl].get('confidence', 0.0):
                 unique_segments[lbl] = seg
         return list(unique_segments.values())
-       
+        
     except Exception as e:
         print(f"Ошибка при анализе изображения: {str(e)}")
         return []

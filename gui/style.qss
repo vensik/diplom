@@ -24,11 +24,27 @@ QTextEdit {
     font-family: monospace;
 }
 
-QCheckBox {
-    spacing: 10px;
-}
-
 QListWidget {
     background-color: #1e1e1e;
     border: 1px solid #333;
+}
+
+QPushButton[rowButton="true"] {
+    border: 1px solid #00bfff;
+    border-radius: 10px;
+    color: white;
+    background: #222;
+    min-width: 100px;
+    min-height: 40px;
+    font-size: 16px;
+}
+QPushButton[rowButton="true"]:checked {
+    background: #00bfff;
+    color: #111;
+    font-weight: bold;
+}
+QCheckBox[diseaseBox="true"] {
+    color: white;
+    font-size: 15px;
+    spacing: 12px;
 }

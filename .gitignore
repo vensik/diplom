@@ -5,7 +5,7 @@ __pycache__/
 *.pyd
 
 # Virtual environment
-yolo-env/
+venv/
 .env/
 
 # Jupyter Notebook checkpoints (если появятся)
@@ -22,15 +22,16 @@ yolo-env/
 *.ckpt
 
 # Data folders
-runs/segment
-dataset/images/
-dataset/masks/
+ai/yolo
+ai/unet
+dataset
 
 # Logs, reports, etc.
 *.log
 *.csv
 *.pdf
 *.xlsx
+*.bat
 
 # OS files
 .DS_Store
