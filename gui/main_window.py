@@ -1,38 +1,42 @@
+# gui/main_window.py
+
 import sys
+import os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QTextEdit, QListWidget, QCheckBox,
     QVBoxLayout, QHBoxLayout, QFileDialog, QListWidgetItem, QFrame
 )
 from PyQt5.QtGui import QPixmap, QFont, QColor
 from PyQt5.QtCore import Qt
-from ai.yolo_segmentation import predict_image
-from gui.detection_canvas import DetectionCanvas
-from gui.detection_canvas import Segment
-from gui.segments_loader import load_segments
-
+from gui.canvas import Canvas
+from ai.diagnosis import diagnose_image
 
 class DentalDiagnosisApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("X-ray Scanner")
         self.setMinimumSize(1000, 700)
-        self.segments = load_segments()
         self.init_ui()
 
     def init_ui(self):
         # Левая панель
-        self.load_button = QPushButton("Загрузить снимок")
-        self.analyze_button = QPushButton("Анализировать")
-        self.save_button = QPushButton("Сохранить результат")
+        self.load_btn = QPushButton("Загрузить снимок")
+        self.save_btn = QPushButton("Сохранить результат")
+
+        self.zoom_in_btn = QPushButton("Увеличить")
+        self.zoom_out_btn = QPushButton("Уменьшить")
+        self.fit_btn = QPushButton("Выровнять по окну")
 
         left_layout = QVBoxLayout()
-        left_layout.addWidget(self.load_button)
-        left_layout.addWidget(self.analyze_button)
-        left_layout.addWidget(self.save_button)
+        left_layout.addWidget(self.load_btn)
+        left_layout.addWidget(self.save_btn)
+        left_layout.addWidget(self.zoom_in_btn)
+        left_layout.addWidget(self.zoom_out_btn)
+        left_layout.addWidget(self.fit_btn)
         left_layout.addStretch()
 
         # Зона снимка с отрисовкой
-        self.canvas = DetectionCanvas()
+        self.canvas = Canvas()
         self.canvas.setMinimumSize(400, 400)
 
         # Правая панель
@@ -40,22 +44,11 @@ class DentalDiagnosisApp(QWidget):
         self.filter_layout.addWidget(QLabel("Сегменты"))
 
         self.checkboxes = {}
-        # Создаём чекбоксы динамически на основе меток
-        labels = sorted(set(seg.label for seg in self.segments))
-        for label in labels:
-            cb = QCheckBox(label)
-            cb.setChecked(True)
-            cb.stateChanged.connect(self.on_filter_changed)
-            self.filter_layout.addWidget(cb)
-            self.checkboxes[label] = cb
-
         self.filter_layout.addStretch()
 
         # Панель последних сканирований
         self.recent_label = QLabel("Последние сканирования")
         self.recent_scans = QListWidget()
-        self.recent_scans.addItem("Снимок №12345")
-        self.recent_scans.addItem("Снимок №12344")
 
         right_layout = QVBoxLayout()
         right_layout.addLayout(self.filter_layout)
@@ -80,9 +73,12 @@ class DentalDiagnosisApp(QWidget):
         self.setLayout(main_layout)
 
         # Связываем кнопки с методами
-        self.load_button.clicked.connect(self.load_image)
-        self.analyze_button.clicked.connect(self.analyze_image)
-        self.save_button.clicked.connect(self.save_result)
+        self.load_btn.clicked.connect(self.load_image)
+        self.save_btn.clicked.connect(self.save_result)
+
+        self.zoom_in_btn.clicked.connect(self.canvas.zoom_in)
+        self.zoom_out_btn.clicked.connect(self.canvas.zoom_out)
+        self.fit_btn.clicked.connect(self.canvas.fit_to_window)
 
     def log(self, text):
         self.log_output.append(text)
@@ -93,18 +89,16 @@ class DentalDiagnosisApp(QWidget):
             self.canvas.set_image(path)
             self.log(f"Загружен снимок: {path.split('/')[-1]}")
             self.recent_scans.addItem(f"Снимок: {path.split('/')[-1]}")
-
-            self.canvas.set_segments(self.segments)
-            self.update_filter_checkboxes()
+            self.analyze_image()
 
     def update_filter_checkboxes(self):
         # Обновляем чекбоксы в соответствии с активными сегментами
-        labels = sorted(set(seg.label for seg in self.canvas.segments))
+        labels = sorted(set(seg['label'] for seg in self.canvas.segments))
         # Удаляем старые чекбоксы
         for i in reversed(range(self.filter_layout.count())):
             widget = self.filter_layout.itemAt(i).widget()
             if widget and isinstance(widget, QCheckBox):
-                widget.deleteLater()
+                widget.setParent(None)
         self.checkboxes.clear()
 
         for label in labels:
@@ -113,17 +107,31 @@ class DentalDiagnosisApp(QWidget):
             cb.stateChanged.connect(self.on_filter_changed)
             self.filter_layout.insertWidget(1, cb)  # после заголовка
             self.checkboxes[label] = cb
+            
+        self.on_filter_changed() 
 
     def on_filter_changed(self):
         active = {label for label, cb in self.checkboxes.items() if cb.isChecked()}
         self.canvas.set_active_labels(active)
 
     def analyze_image(self):
-        # Заглушка ИИ-анализа
-        self.log("[AI] Обнаружено: Кариес (3 участка), Периодонтит (1 участок)")
+        if not hasattr(self.canvas, 'image_path'):
+            self.log("[Ошибка] Изображение не загружено")
+            return
+        try:
+            self.log("Начало анализа...")
+            messages, segments = diagnose_image(self.canvas.image_path)
+            self.canvas.set_teeth(segments)
+            self.update_filter_checkboxes()
+            # self.canvas.set_disease_masks(disease_masks)
+        except Exception as e:
+            self.log(f"[Ошибка] {str(e)}")
+            import traceback
+            print(f"Полная ошибка: {traceback.format_exc()}")
+
 
     def save_result(self):
-        self.log("[USER] Нажата кнопка 'Сохранить результат'")
+        self.log("Результат оохранен")
         # Логика сохранения результата (пока заглушка)
 
 
