@@ -207,10 +207,14 @@ class Canvas(QWidget):
 
                 # Подпись номера зуба
                 painter.setPen(Qt.white)
-                label_x = min(p.x() for p in path)
-                label_y = min(p.y() for p in path)
+                label_x = sum(p.x() for p in path) / len(path)
+                label_y = sum(p.y() for p in path) / len(path)
                 pos = segment['label'].split()[-1]
-                painter.drawText(int(label_x) + x, int(label_y) + y - 5, pos)
+                font = painter.font()
+                font.setBold(True)
+                font.setPointSize(14)  # Можно изменить размер
+                painter.setFont(font)
+                painter.drawText(int(label_x) + x, int(label_y) + y, pos)
 
         # 3. Патологии (если нужно)
         for segment in self.visible_segments:

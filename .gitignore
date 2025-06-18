@@ -21,10 +21,11 @@ venv/
 *.pth
 *.ckpt
 
-# Data folders
+# Data/train
 ai/yolo
 ai/unet
 dataset
+ai/yolo_adjust.py
 
 # Logs, reports, etc.
 *.log

@@ -114,10 +114,15 @@ class DentalDiagnosisApp(QWidget):
         try:
             self.log("Начало анализа...")
             messages, segments = diagnose_image(self.canvas.image_path)
+
+            for msg in messages:
+                self.log(msg)
+
             self.canvas.set_teeth(segments)
             # self.canvas.set_disease_masks(disease_masks)
 
             row_names = set(get_row_from_label(seg['label']) for seg in segments if seg['label'].startswith('tooth'))
+            # если патологии не визуализируются на снимке, то их можно не выделять
             disease_labels = set(seg['label'] for seg in segments if not seg['label'].startswith('tooth'))
             self.filter_panel.update_rows(row_names)
             self.filter_panel.update_diseases(disease_labels)

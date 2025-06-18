@@ -6,13 +6,13 @@ from collections import namedtuple
 from ultralytics import YOLO
 
 # Полный список классов
-yaml_path = "ai/yolo/data.yaml"
+yaml_path = "ai/yolo/dataset/data.yaml"
 with open(yaml_path, "r", encoding="utf-8") as f:
     data_yaml = yaml.safe_load(f)
 CLASS_NAMES = data_yaml["names"]  
 
 # Загрузка модели YOLO сегментации
-model = YOLO("ai/yolo/results/train3/weights/best.pt")
+model = YOLO("ai/yolo/results/train/weights/best.pt")
 
 def predict_teeth(image_path):
     try:
