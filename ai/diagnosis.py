@@ -13,15 +13,15 @@ def get_row_from_label(label):
     except Exception:
         return "не определён"
     if 10 < n < 20:
-        return "верхний правый"
+        return "Верхний\nправый"
     elif 20 < n < 30:
-        return "верхний левый"
+        return "Верхний\nлевый"
     elif 30 < n < 40:
-        return "нижний левый"
+        return "Нижний\nлевый"
     elif 40 < n < 50:
-        return "нижний правый"
+        return "Нижний\nправый"
     elif n >= 50:
-        return "зачаток"
+        return "Зачатки"
     return "не определён"
     
 def tooth_pos_in_row(label):
@@ -99,6 +99,8 @@ def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
     results = []
 
     print("DIAGNOSE_IMAGE: teeth =", teeth[:3]) 
+    print("DIAGNOSE_IMAGE: pathologies =", disease_masks["pathologies"][:3])
+    print("DIAGNOSE_IMAGE: extra =", disease_masks["extra"][:3])
 
     if not teeth:
         results = ["Объекты не обнаружены"]
@@ -107,20 +109,28 @@ def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
     teeth_labels = [tooth['label'] for tooth in teeth]
     results.extend(teeth_fullness(teeth_labels))
 
-    if not disease_masks["pathologies"]:
-        return results, teeth
+    # Если нет масок вообще
+    if not disease_masks["pathologies"] and not disease_masks["extra"]:
+        # Вернуть только зубы для отрисовки
+        segments = [dict(tooth, is_tooth=True) for tooth in teeth]
+        return results, segments
 
-    first_mask = disease_masks["pathologies"][0]["mask"]
-    mask_shape = first_mask.shape
+    # Размерность для маски зуба (любая подходящая маска)
+    if disease_masks["pathologies"]:
+        first_mask = disease_masks["pathologies"][0]["mask"]
+    elif disease_masks["extra"]:
+        first_mask = disease_masks["extra"][0]["mask"]
+    else:
+        first_mask = None
+    mask_shape = first_mask.shape if first_mask is not None else (256, 256)  # fallback
 
+    # Проверка наличия патологий для каждого зуба
     for tooth in teeth:
         row = get_row_from_label(tooth['label'])
         pos = tooth_pos_in_row(tooth['label'])
-
         tooth_mask = np.zeros(mask_shape, dtype=np.uint8)
         pts = np.array([tooth['points']], dtype=np.int32)
         cv2.fillPoly(tooth_mask, pts, 1)
-        # проверяем каждую болезнь
         for item in disease_masks["pathologies"]:
             overlap = (tooth_mask & item["mask"])
             area_tooth = tooth_mask.sum()
@@ -130,11 +140,25 @@ def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
             frac = area_overlap / area_tooth
             confidence = item.get("confidence", 1.0)
             if frac > overlap_threshold and confidence > conf_threshold:
-                pos = tooth_pos_in_row(tooth['label'])
                 msg = (
                     f"Зуб {pos} ({row} ряд): "
                     f"{item['human_label']}, уверенность {confidence:.2f}"
                 )
                 results.append(msg)
 
-    return results, teeth
+    # Формируем полный список для визуализации
+    segments = []
+    for tooth in teeth:
+        tooth_seg = dict(tooth)
+        tooth_seg['is_tooth'] = True
+        segments.append(tooth_seg)
+    for item in disease_masks["pathologies"]:
+        pathology_seg = dict(item)
+        pathology_seg['is_pathology'] = True
+        segments.append(pathology_seg)
+    for item in disease_masks["extra"]:
+        extra_seg = dict(item)
+        extra_seg['is_extra'] = True
+        segments.append(extra_seg)
+
+    return results, segments

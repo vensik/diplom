@@ -96,13 +96,12 @@ class DentalDiagnosisApp(QWidget):
         active_diseases = self.filter_panel.get_active_diseases()
         visible = []
         for seg in self.canvas.segments:
-            if seg['label'].startswith("tooth"):
+            if seg.get('is_tooth', False):
                 if get_row_from_label(seg['label']) in active_rows:
                     visible.append(seg)
-            else:
+            elif seg.get('is_pathology', False) or seg.get('is_extra', False):
                 if seg['label'] in active_diseases:
                     visible.append(seg)
-
         self.canvas.visible_segments = visible
         self.canvas.active_labels = {seg['label'] for seg in visible}
         self.canvas.update()
@@ -114,15 +113,11 @@ class DentalDiagnosisApp(QWidget):
         try:
             self.log("Начало анализа...")
             messages, segments = diagnose_image(self.canvas.image_path)
-
+            print("Передано в canvas: ", [s['label'] for s in segments])
+            self.canvas.set_segments(segments)
             for msg in messages:
                 self.log(msg)
-
-            self.canvas.set_teeth(segments)
-            # self.canvas.set_disease_masks(disease_masks)
-
             row_names = set(get_row_from_label(seg['label']) for seg in segments if seg['label'].startswith('tooth'))
-            # если патологии не визуализируются на снимке, то их можно не выделять
             disease_labels = set(seg['label'] for seg in segments if not seg['label'].startswith('tooth'))
             self.filter_panel.update_rows(row_names)
             self.filter_panel.update_diseases(disease_labels)
@@ -132,7 +127,9 @@ class DentalDiagnosisApp(QWidget):
             import traceback
             print(f"Полная ошибка: {traceback.format_exc()}")
 
-
     def save_result(self):
-        self.log("Результат оохранен")
-        # Логика сохранения результата (пока заглушка)
+        path, _ = QFileDialog.getSaveFileName(self, "Сохранить отчет", "", "Text Files (*.txt)")
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.log_output.toPlainText())
+            self.log("Отчет сохранен")

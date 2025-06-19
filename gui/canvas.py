@@ -1,14 +1,28 @@
 # gui/canvas.py
-
+import numpy as np
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QCursor, QRegion, QPolygonF
 from PyQt5.QtCore import Qt, QTimer, QPointF, QPoint
 
+from ai.classes import CLASSES, PATHOLOGIES, EXTRA, RAW_TO_HUMAN
+
 DISEASE_COLORS = {
-    "caries": QColor(255, 0, 0, 150),
-    "periapical pathology": QColor(0, 255, 0, 150),
-    "calculus": QColor(255, 165, 0, 150),
-    "implant": QColor(128, 0, 128, 150),
+    "Periodontit": QColor(255, 60, 60, 180),
+    "caries": QColor(255, 120, 60, 180),
+    "cyst": QColor(255, 80, 180, 180),
+    "radix": QColor(200, 60, 255, 180),
+    "supplemental": QColor(230, 180, 60, 180),
+    "missing teeth": QColor(255, 80, 80, 180),
+    # Приглушённые цвета для следов лечения и extra
+    "filling": QColor(60, 180, 255, 80),
+    "crown": QColor(130, 190, 255, 80),
+    "implant": QColor(60, 120, 220, 70),
+    "mini implant": QColor(120, 180, 220, 70),
+    "sealed channel": QColor(100, 150, 220, 70),
+    "artefact": QColor(150, 150, 150, 40),
+    "bracket": QColor(200, 200, 80, 60),
+    "eights": QColor(100, 100, 180, 30),
+    "retailer": QColor(150, 100, 200, 40),
 }
 
 class Canvas(QWidget):
@@ -28,7 +42,7 @@ class Canvas(QWidget):
         self.image_offset = QPointF(0, 0)
 
 
-        # Для анимации (если нужно)
+        # Для анимации
         self.analysis_progress = 0
         self.animating = False
         self.timer = QTimer()
@@ -59,15 +73,11 @@ class Canvas(QWidget):
             self.timer.stop()
         self.update()
 
-    def set_teeth(self, teeth):
-        self.segments = teeth
-        self.visible_segments = teeth.copy()
-        self.active_labels = {seg['label'] for seg in teeth}
-        self.update()
-    
-    def set_disease_masks(self, disease_masks):
-        self.disease_masks = {name: data['mask'] for name, data in disease_masks.items()}
-        self.update()
+    def set_segments(self, segments):
+        self.segments = segments
+        self.visible_segments = segments
+        self.active_labels = set(s['label'] for s in segments)
+        self.update() 
 
     def reveal_next_segment(self):
         if len(self.visible_segments) < len(self.segments):
@@ -77,6 +87,8 @@ class Canvas(QWidget):
             self.detection_timer.stop()
 
     def set_active_labels(self, labels: set):
+        if not labels:
+            labels = set(seg['label'] for seg in self.segments)
         self.active_labels = labels
         self.visible_segments = [seg for seg in self.segments if seg['label'] in self.active_labels]
         self.update()
@@ -154,29 +166,28 @@ class Canvas(QWidget):
         y = int((self.height() - self.scaled_cache.height()) // 2 + self.image_offset.y())
         painter.drawPixmap(x, y, self.scaled_cache)
 
-        # 1. Затемняем весь снимок
+        # Затемняем весь снимок
         dark_color = QColor(0, 0, 0, 170)  # 170 из 255 ~70% затемнение
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
         painter.fillRect(x, y, self.scaled_cache.width(), self.scaled_cache.height(), dark_color)
 
-        # 2. Ярко выделяем только отмеченные зубы (поверх затемнения)
+        # Ярко выделяем только отмеченные зубы (поверх затемнения)
         img_w, img_h = self.image.width(), self.image.height()
         scale_w = self.scaled_cache.width() / img_w
         scale_h = self.scaled_cache.height() / img_h
-
         for segment in self.visible_segments:
             if segment['label'] not in self.active_labels:
                 continue
 
             # Только для зубов!
-            if segment['label'].startswith("tooth"):
+            if segment.get('is_tooth', False) or segment['label'].startswith("tooth"):
                 # Создаем QPixmap-маску
                 tooth_mask = QPixmap(self.scaled_cache.size())
                 tooth_mask.fill(Qt.transparent)
                 tooth_painter = QPainter(tooth_mask)
                 tooth_painter.setRenderHint(QPainter.Antialiasing)
                 path = []
-                for px, py in segment['points']:
+                for px, py in np.array(segment['points']):
                     sx = int(px * scale_w)
                     sy = int(py * scale_h)
                     path.append(QPointF(sx, sy))
@@ -216,24 +227,33 @@ class Canvas(QWidget):
                 painter.setFont(font)
                 painter.drawText(int(label_x) + x, int(label_y) + y, pos)
 
-        # 3. Патологии (если нужно)
-        for segment in self.visible_segments:
-            if segment['label'] not in self.active_labels:
-                continue
-            if not segment['label'].startswith("tooth"):
-                # Патология — цветная полупрозрачная заливка/контур поверх
-                path = []
-                for px, py in segment['points']:
-                    sx = x + (px * scale_w)
-                    sy = y + (py * scale_h)
-                    path.append(QPointF(sx, sy))
+             # Патологии 
+            elif segment.get('is_pathology', False):
+                label = segment['label']
+                path = [
+                    QPointF(x + (px * scale_w), y + (py * scale_h))
+                    for px, py in segment['points']
+                ]
                 if len(path) > 2:
-                    color = DISEASE_COLORS.get(segment['label'].lower(), QColor(255, 0, 0, 150))
+                    color = DISEASE_COLORS.get(label, QColor(255, 0, 0, 160))
                     painter.setPen(Qt.NoPen)
                     painter.setBrush(QBrush(color))
                     painter.drawPolygon(*path)
-                    # Подпись названия патологии
+                    cx = sum(p.x() for p in path) / len(path)
+                    cy = sum(p.y() for p in path) / len(path)
                     painter.setPen(Qt.yellow)
-                    label_x = min(p.x() for p in path)
-                    label_y = max(p.y() for p in path)
-                    painter.drawText(int(label_x), int(label_y) + 15, segment['label'])
+                    painter.drawText(int(cx), int(cy), RAW_TO_HUMAN[label])
+                continue
+
+            if segment.get('is_extra', False):
+                label = segment['label']
+                path = [
+                    QPointF(x + (px * scale_w), y + (py * scale_h))
+                    for px, py in segment['points']
+                ]
+                if len(path) > 2:
+                    color = DISEASE_COLORS.get(label, QColor(80, 130, 180, 60))
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(color))
+                    painter.drawPolygon(*path)
+                continue

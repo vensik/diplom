@@ -26,6 +26,7 @@ ai/yolo
 ai/unet
 dataset
 ai/yolo_adjust.py
+gui/icons
 
 # Logs, reports, etc.
 *.log

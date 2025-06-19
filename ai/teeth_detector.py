@@ -12,7 +12,7 @@ with open(yaml_path, "r", encoding="utf-8") as f:
 CLASS_NAMES = data_yaml["names"]  
 
 # Загрузка модели YOLO сегментации
-model = YOLO("ai/yolo/results/train/weights/best.pt")
+model = YOLO("ai/yolo/yolo_weights.pt")
 
 def predict_teeth(image_path):
     try:

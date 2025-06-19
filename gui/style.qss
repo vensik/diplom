@@ -43,8 +43,9 @@ QPushButton[rowButton="true"]:checked {
     color: #111;
     font-weight: bold;
 }
+
 QCheckBox[diseaseBox="true"] {
     color: white;
     font-size: 15px;
-    spacing: 12px;
+    spacing: 10px;
 }
