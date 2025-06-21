@@ -28,8 +28,8 @@ class FilterPanel(QWidget):
         self.layout.addLayout(self.disease_layout)
         self.disease_checkboxes = {}
 
-    ICON_EYE = os.path.join(os.path.dirname(__file__), "icons/eye-regular.svg")
-    ICON_EYE_SLASH = os.path.join(os.path.dirname(__file__), "icons/eye-regular-slash.svg")
+    ICON_EYE = os.path.join(os.path.dirname(__file__), "icons_data/eye-regular.svg")
+    ICON_EYE_SLASH = os.path.join(os.path.dirname(__file__), "icons_data/eye-regular-slash.svg")
 
     def update_rows(self, row_names):
         while self.top_row_layout.count():

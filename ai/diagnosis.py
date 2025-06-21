@@ -1,11 +1,16 @@
 # ai/diagnosis.py
 
+import os
+import tempfile
 import numpy as np
 import cv2
-from ai.teeth_detector import predict_teeth
+from PIL import Image, ImageOps
 from collections import namedtuple, defaultdict
+
+from ai.teeth_detect import predict_teeth
+from ai.disease_seg import predict_masks
+from ai.valid import valid_teeth, valid_masks 
 Segment = namedtuple('Segment', ['points', 'label'])
-from ai.disease_segmentator import predict_masks
 
 def get_row_from_label(label):
     try:
@@ -92,37 +97,72 @@ def teeth_fullness(teeth_labels):
         results.append("Полный набор зубов")
     return results
 
+def to_interest_zone(image_path, teeth_segments, desired_size=256, extra_percent=0.08, debug_save_path=None, return_bbox=False):
+    img = Image.open(image_path).convert('RGB')
+    w, h = img.size
 
-def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
+    # Собираем все x-координаты крайних точек зубов
+    all_x = []
+    for seg in teeth_segments:
+        points = seg['points']
+        all_x.extend([x for x, y in points])
+
+    x_min, x_max = min(all_x), max(all_x)
+    width_teeth = x_max - x_min
+    extra_padding = int(width_teeth * extra_percent)
+    x_min = max(0, x_min - extra_padding)
+    x_max = min(w, x_max + extra_padding)
+    img_cropped = img.crop((x_min, 0, x_max, h))
+
+    # Паддинг по высоте для квадрата
+    cw, ch = img_cropped.size
+    pad_top = (cw - ch) // 2
+    pad_bottom = cw - ch - pad_top
+    img_padded = ImageOps.expand(img_cropped, border=(0, pad_top, 0, pad_bottom), fill=0)
+
+    img_final = img_padded.resize((desired_size, desired_size), Image.BILINEAR)
+    bbox = (x_min, 0, x_max, h)
+    if debug_save_path:
+        img_final.save(debug_save_path)
+    if return_bbox:
+        return img_final, bbox
+    return img_final
+
+
+def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.7):
+    # Детекция зубов
     teeth = predict_teeth(image_path)
-    disease_masks = predict_masks(image_path)
-    results = []
-
-    print("DIAGNOSE_IMAGE: teeth =", teeth[:3]) 
-    print("DIAGNOSE_IMAGE: pathologies =", disease_masks["pathologies"][:3])
-    print("DIAGNOSE_IMAGE: extra =", disease_masks["extra"][:3])
-
-    if not teeth:
-        results = ["Объекты не обнаружены"]
-        return results, []
-
     teeth_labels = [tooth['label'] for tooth in teeth]
+    results = []
     results.extend(teeth_fullness(teeth_labels))
 
-    # Если нет масок вообще
-    if not disease_masks["pathologies"] and not disease_masks["extra"]:
-        # Вернуть только зубы для отрисовки
-        segments = [dict(tooth, is_tooth=True) for tooth in teeth]
-        return results, segments
+    error_message, expected_teeth = valid_teeth(teeth, results)
+    if error_message:
+        return [error_message], []
 
-    # Размерность для маски зуба (любая подходящая маска)
-    if disease_masks["pathologies"]:
-        first_mask = disease_masks["pathologies"][0]["mask"]
-    elif disease_masks["extra"]:
-        first_mask = disease_masks["extra"][0]["mask"]
+    # Подготовка и сегментация масок
+    cropped_image = to_interest_zone(image_path, teeth, desired_size=256)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        cropped_image.save(tmp.name)
+        cropped_path = tmp.name
+    masks_seg = predict_masks(cropped_path)
+
+    early_return = valid_masks(teeth, masks_seg, results)
+    if early_return:
+        return early_return
+
+    print("[DEBUG]: teeth =", teeth[:3]) 
+    print("[DEBUG]: pathologies =", masks_seg["pathologies"][:3])
+    print("[DEBUG]: extra =", masks_seg["extra"][:3])
+
+    # Размерность для маски зуба
+    if masks_seg["pathologies"]:
+        first_mask = masks_seg["pathologies"][0]["mask"]
+    elif masks_seg["extra"]:
+        first_mask = masks_seg["extra"][0]["mask"]
     else:
         first_mask = None
-    mask_shape = first_mask.shape if first_mask is not None else (256, 256)  # fallback
+    mask_shape = first_mask.shape if first_mask is not None else (256, 256) 
 
     # Проверка наличия патологий для каждого зуба
     for tooth in teeth:
@@ -131,7 +171,7 @@ def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
         tooth_mask = np.zeros(mask_shape, dtype=np.uint8)
         pts = np.array([tooth['points']], dtype=np.int32)
         cv2.fillPoly(tooth_mask, pts, 1)
-        for item in disease_masks["pathologies"]:
+        for item in masks_seg["pathologies"]:
             overlap = (tooth_mask & item["mask"])
             area_tooth = tooth_mask.sum()
             area_overlap = overlap.sum()
@@ -152,13 +192,18 @@ def diagnose_image(image_path, overlap_threshold=0.15, conf_threshold=0.5):
         tooth_seg = dict(tooth)
         tooth_seg['is_tooth'] = True
         segments.append(tooth_seg)
-    for item in disease_masks["pathologies"]:
+    for item in masks_seg["pathologies"]:
         pathology_seg = dict(item)
         pathology_seg['is_pathology'] = True
         segments.append(pathology_seg)
-    for item in disease_masks["extra"]:
+    for item in masks_seg["extra"]:
         extra_seg = dict(item)
         extra_seg['is_extra'] = True
         segments.append(extra_seg)
+
+    try:
+        os.remove(croped_path)
+    except Exception:
+        pass
 
     return results, segments

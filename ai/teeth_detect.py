@@ -1,4 +1,4 @@
-# ai/teeth_detector.py
+# ai/teeth_detect.py
 
 import os
 import yaml
@@ -6,13 +6,13 @@ from collections import namedtuple
 from ultralytics import YOLO
 
 # Полный список классов
-yaml_path = "ai/yolo/dataset/data.yaml"
+yaml_path = "ai/yolo_data/dataset/data.yaml"
 with open(yaml_path, "r", encoding="utf-8") as f:
     data_yaml = yaml.safe_load(f)
 CLASS_NAMES = data_yaml["names"]  
 
 # Загрузка модели YOLO сегментации
-model = YOLO("ai/yolo/yolo_weights.pt")
+model = YOLO("ai/yolo_data/best.pt")
 
 def predict_teeth(image_path):
     try:

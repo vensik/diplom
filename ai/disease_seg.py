@@ -1,4 +1,4 @@
-# ai/disease_segmentator.py
+# ai/disease_seg.py
 
 import os
 import csv
@@ -9,33 +9,22 @@ import numpy as np
 import segmentation_models_pytorch as smp
 import cv2
 
-from ai.unet.module import UNet
+from ai.unet_data.module import create_unet
 from ai.classes import CLASSES, PATHOLOGIES, EXTRA, RAW_TO_HUMAN
 
 # Подгрузка весов и инициализация модели
-WEIGHTS_PATH = "ai/unet/u-net_weights.pth"
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+WEIGHTS_PATH = "ai/unet_data/u-net_weights.pth"
 NUM_CLASSES = len(CLASSES)
 
-# model = smp.UnetPlusPlus(
-#     encoder_name="efficientnet-b3",
-#     encoder_weights=None,
-#     in_channels=3,
-#     classes=NUM_CLASSES
-# ).to(device)
-model = UNet(num_classes=NUM_CLASSES)
-model.to(device)
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = create_unet(num_classes=NUM_CLASSES).to(device)
 
 model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=device))
 model.eval()
 
 transform = transforms.Compose([
-    transforms.RandomResizedCrop(
-        size=(256, 256),   
-        scale=(1.0, 1.1),     
-        ratio=(1.0, 1.0),     
-        interpolation=transforms.InterpolationMode.BILINEAR
-    ),
+    transforms.Resize((256,256), interpolation=transforms.InterpolationMode.BILINEAR),
     transforms.ToTensor()
 ])
 
@@ -76,7 +65,7 @@ def predict_masks(image_path):
             "label": label,
             "human_label": RAW_TO_HUMAN[label],
             "mask": mask,
-            # "contour": mask_to_contour(mask), # если используешь
+            "contour": mask_to_contour(mask),
         }
         if label in PATHOLOGIES:
             results["pathologies"].append(item)

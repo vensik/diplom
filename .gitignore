@@ -8,9 +8,6 @@ __pycache__/
 venv/
 .env/
 
-# Jupyter Notebook checkpoints (если появятся)
-.ipynb_checkpoints/
-
 # VSCode / PyCharm settings
 .vscode/
 .idea/
@@ -21,12 +18,12 @@ venv/
 *.pth
 *.ckpt
 
-# Data/train
-ai/yolo
-ai/unet
-dataset
-ai/yolo_adjust.py
-gui/icons
+# Data
+*_data
+
+# Train
+*_prep.py
+*_train.py
 
 # Logs, reports, etc.
 *.log
